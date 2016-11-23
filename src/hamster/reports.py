@@ -26,6 +26,7 @@ import csv
 import copy
 import itertools
 import re
+import codecs
 from string import Template
 
 from configuration import runtime
@@ -74,7 +75,7 @@ def simple(facts, start_date, end_date, format, path = None):
 class ReportWriter(object):
     #a tiny bit better than repeating the code all the time
     def __init__(self, path = None, datetime_format = "%Y-%m-%d %H:%M:%S"):
-        self.file = open(path, "w") if path else StringIO()
+        self.file = open(path, "w") if path else codecs.getwriter("utf8")(StringIO())
         self.datetime_format = datetime_format
 
     def export(self):
@@ -83,9 +84,9 @@ class ReportWriter(object):
     def write_report(self, facts):
         try:
             for fact in facts:
-                fact.activity= fact.activity.encode('utf-8')
-                fact.description = (fact.description or u"").encode('utf-8')
-                fact.category = (fact.category or _("Unsorted")).encode('utf-8')
+                fact.activity= fact.activity
+                fact.description = (fact.description or u"")
+                fact.category = (fact.category or _("Unsorted"))
 
                 if self.datetime_format:
                     fact.start_time = fact.start_time.strftime(self.datetime_format)
@@ -94,8 +95,6 @@ class ReportWriter(object):
                         fact.end_time = fact.end_time.strftime(self.datetime_format)
                     else:
                         fact.end_time = ""
-
-                fact.tags = ", ".join(fact.tags)
 
                 self._write_fact(fact)
 
@@ -158,7 +157,7 @@ class TSVWriter(ReportWriter):
                    _("description"),
                    # column title in the TSV export format
                    _("tags")]
-        self.csv_writer.writerow([h.encode('utf-8') for h in headers])
+        self.csv_writer.writerow([h for h in headers])
 
     def _write_fact(self, fact):
         fact.delta = stuff.duration_minutes(fact.delta)
@@ -168,7 +167,7 @@ class TSVWriter(ReportWriter):
                                   fact.delta,
                                   fact.category,
                                   fact.description,
-                                  fact.tags])
+                                  ", ".join(fact.tags)])
     def _finish(self, facts):
         pass
 
@@ -186,7 +185,7 @@ class XMLWriter(ReportWriter):
         activity.setAttribute("duration_minutes", str(stuff.duration_minutes(fact.delta)))
         activity.setAttribute("category", fact.category)
         activity.setAttribute("description", fact.description)
-        activity.setAttribute("tags", fact.tags)
+        activity.setAttribute("tags", ", ".join(fact.tags))
         self.activity_list.appendChild(activity)
 
     def _finish(self, facts):
@@ -266,7 +265,7 @@ class HTMLWriter(ReportWriter):
             date_iso = fact.date.isoformat(),
             activity = fact.activity,
             category = category,
-            tags = fact.tags,
+            tags = ", ".join(fact.tags),
             start = fact.start_time.strftime('%H:%M'),
             start_iso = fact.start_time.isoformat(),
             end = end_time_str,
@@ -301,7 +300,6 @@ class HTMLWriter(ReportWriter):
 
         data = dict(
             title = self.title,
-            #grand_total = _("%s hours") % ("%.1f" % (total_duration.seconds / 60.0 / 60 + total_duration.days * 24)),
 
             totals_by_day_title = _("Totals by Day"),
             activity_log_title = _("Activity Log"),
@@ -333,6 +331,11 @@ class HTMLWriter(ReportWriter):
 
             all_activities_rows = "\n".join(self.fact_rows)
         )
+
+        for key, val in data.iteritems():
+            if isinstance(val, basestring):
+                data[key] = val.encode("utf-8")
+
         self.file.write(Template(self.main_template).safe_substitute(data))
 
         if self.override:
